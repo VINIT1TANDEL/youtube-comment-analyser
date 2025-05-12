@@ -22,7 +22,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
-
+from selenium.webdriver.chrome.options import Options
 # NLTK Downloads
 nltk.download('vader_lexicon')
 nltk.download('stopwords')
@@ -41,12 +41,14 @@ stop_words = stopwords.words('english')
 def returnytcomments(url):
     data = []
 
-    # Set up Chrome with webdriver-manager
-    options = webdriver.ChromeOptions()
-    options.add_argument("--headless")  # Comment out this line if you want to see the browser
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
+    # Set up Chrome options
+    options = Options()
+    options.add_argument('--headless')  # Run headless
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    options.binary_location = "/usr/bin/chromium"  # Explicitly set the path to the Chromium binary
 
+    # Set up Chrome with webdriver-manager
     with webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options) as driver:
         wait = WebDriverWait(driver, 15)
         driver.get(url)
