@@ -5,4 +5,4 @@ apt-get update
 apt-get install -y chromium chromium-driver
 
 # Start the Flask app
-python Youtubecomment-analyser/app.py
+python app.py
