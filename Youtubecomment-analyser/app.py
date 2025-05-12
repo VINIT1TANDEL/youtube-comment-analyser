@@ -43,23 +43,23 @@ def returnytcomments(url):
 
     # Set up Chrome options
     options = Options()
-    options.add_argument('--headless')  # Run headless
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.binary_location = "/usr/bin/chromium"  # Explicitly set the path to the Chromium binary
+    options.add_argument("--headless")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.binary_location = "/usr/bin/google-chrome"  # Correct binary path
 
-    # Set up Chrome with webdriver-manager
-    with webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options) as driver:
-        wait = WebDriverWait(driver, 15)
-        driver.get(url)
+    driver = webdriver.Chrome(options=options)
+    wait = WebDriverWait(driver, 15)
+    driver.get(url)
 
-        for item in range(5):
-            wait.until(EC.visibility_of_element_located((By.TAG_NAME, "body"))).send_keys(Keys.END)
-            time.sleep(2)
+    for item in range(5):
+        wait.until(EC.visibility_of_element_located((By.TAG_NAME, "body"))).send_keys(Keys.END)
+        time.sleep(2)
 
-        for comment in wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "#content"))):
-            data.append(comment.text)
+    for comment in wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "#content"))):
+        data.append(comment.text)
 
+    driver.quit()
     return data
 
 
