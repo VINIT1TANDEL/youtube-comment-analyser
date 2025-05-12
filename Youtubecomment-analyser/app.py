@@ -1,28 +1,15 @@
 import re
 import os
 import nltk
-import joblib
 import requests
 import numpy as np
-from bs4 import BeautifulSoup
-import urllib.request as urllib
 import matplotlib.pyplot as plt
 from nltk.corpus import stopwords
 from nltk.sentiment.vader import SentimentIntensityAnalyzer
 from nltk.stem import WordNetLemmatizer
 from wordcloud import WordCloud, STOPWORDS
 from flask import Flask, render_template, request
-import time
 
-# Selenium imports
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.options import Options
 # NLTK Downloads
 nltk.download('vader_lexicon')
 nltk.download('stopwords')
@@ -37,31 +24,40 @@ wnl = WordNetLemmatizer()
 sia = SentimentIntensityAnalyzer()
 stop_words = stopwords.words('english')
 
+def extract_video_id(url):
+    match = re.search(r"(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})", url)
+    return match.group(1) if match else None
 
-def returnytcomments(url):
-    data = []
+def returnytcomments(video_id):
+    api_key = os.environ.get('YOUTUBE_API_KEY')
+    if not api_key:
+        raise ValueError("YouTube API key not set in environment variables.")
 
-    # Set up Chrome options
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-    options.binary_location = "/usr/bin/google-chrome"  # Correct binary path
+    comments = []
+    url = f"https://www.googleapis.com/youtube/v3/commentThreads"
+    params = {
+        'part': 'snippet',
+        'videoId': video_id,
+        'key': api_key,
+        'textFormat': 'plainText',
+        'maxResults': 100
+    }
 
-    driver = webdriver.Chrome(options=options)
-    wait = WebDriverWait(driver, 15)
-    driver.get(url)
+    while True:
+        response = requests.get(url, params=params)
+        if response.status_code != 200:
+            raise Exception(f"YouTube API error: {response.status_code} - {response.text}")
 
-    for item in range(5):
-        wait.until(EC.visibility_of_element_located((By.TAG_NAME, "body"))).send_keys(Keys.END)
-        time.sleep(2)
+        data = response.json()
+        for item in data.get('items', []):
+            comment = item['snippet']['topLevelComment']['snippet']['textDisplay']
+            comments.append(comment)
+        if 'nextPageToken' in data:
+            params['pageToken'] = data['nextPageToken']
+        else:
+            break
 
-    for comment in wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, "#content"))):
-        data.append(comment.text)
-
-    driver.quit()
-    return data
-
+    return comments
 
 def clean(org_comments):
     y = []
@@ -74,20 +70,6 @@ def clean(org_comments):
         y.append(' '.join(x))
     return y
 
-
-# def create_wordcloud(clean_reviews):
-#     for_wc = ' '.join(clean_reviews)
-#     wcstops = set(STOPWORDS)
-#     wc = WordCloud(width=1400, height=800, stopwords=wcstops, background_color='white').generate(for_wc)
-#     plt.figure(figsize=(20, 10), facecolor='k', edgecolor='k')
-#     plt.imshow(wc, interpolation='bicubic')
-#     plt.axis('off')
-#     plt.tight_layout()
-#     CleanCache(directory='static/images')
-#     plt.savefig('static/images/woc.png')
-#     plt.close()
-
-
 def returnsentiment(x):
     score = sia.polarity_scores(x)['compound']
     if score > 0:
@@ -98,27 +80,25 @@ def returnsentiment(x):
         sent = 'Negative'
     return score, sent
 
-
 @app.route('/')
 def home():
     return render_template('home.html')
 
-
 @app.route('/results', methods=['GET'])
 def result():
     url = request.args.get('url')
+    video_id = extract_video_id(url)
 
-    org_comments = returnytcomments(url)
-    temp = []
+    if not video_id:
+        return "Invalid YouTube URL.", 400
 
-    for i in org_comments:
-        if 5 < len(i) <= 500:
-            temp.append(i)
+    try:
+        org_comments = returnytcomments(video_id)
+    except Exception as e:
+        return f"Error fetching comments: {e}", 500
 
-    org_comments = temp
+    org_comments = [i for i in org_comments if 5 < len(i) <= 500]
     clean_comments = clean(org_comments)
-
-    # create_wordcloud(clean_comments)
 
     np_count, nn, nne = 0, 0, 0
     predictions = []
@@ -149,28 +129,6 @@ def result():
 
     return render_template('result.html', n=len(clean_comments), nn=nn, np=np_count, nne=nne, dic=dic)
 
-
-@app.route('/wc')
-def wc():
-    return render_template('wc.html')
-
-
-class CleanCache:
-    '''
-    This class is responsible for clearing any residual image files
-    from past searches.
-    '''
-    def __init__(self, directory=None):
-        self.clean_path = directory
-        if os.listdir(self.clean_path) != list():
-            files = os.listdir(self.clean_path)
-            for fileName in files:
-                print(f"Removing file: {fileName}")
-                os.remove(os.path.join(self.clean_path, fileName))
-        print("Cache cleaned!")
-
-
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 10000))  # 10000 is fallback for local dev
-    app.run(host='0.0.0.0', port=port)
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 10000))
+    app.run(host='0.0.0.0', port=port, debug=True)
